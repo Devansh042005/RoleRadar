@@ -90,6 +90,8 @@ model Posting {
 
   @@index([rawTextHash])
   @@index([companyId])
+  @@index([postedAt])
+  @@index([roleCategory, postedAt])
 }
 
 model PostingRaw {
@@ -123,6 +125,7 @@ model PostingSkill {
   posting Posting @relation(fields: [postingId], references: [id])
   skill   Skill   @relation(fields: [skillId], references: [id])
 
+  @@unique([postingId, skillId])
   @@index([skillId])
   @@index([postingId])
 }
@@ -138,6 +141,7 @@ model Application {
   posting      Posting                   @relation(fields: [postingId], references: [id])
   stageHistory ApplicationStageHistory[]
 
+  @@unique([postingId])
   @@index([stage])
 }
 
@@ -147,9 +151,10 @@ model ApplicationStageHistory {
   stage         ApplicationStage
   changedAt     DateTime         @default(now())
 
-  application Application @relation(fields: [applicationId], references: [id])
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
 
   @@index([applicationId])
+  @@index([applicationId, changedAt])
 }
 
 model UserSkillProfile {

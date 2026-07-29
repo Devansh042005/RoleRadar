@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { ExtractionStatus } from '@prisma/client';
 import { prisma } from '../db/prisma';
+import { internalOnly } from '../middleware/internalAuth';
 
 export const internalExtractionRouter = Router();
+
+internalExtractionRouter.use(internalOnly);
 
 internalExtractionRouter.get('/internal/extraction/stats', async (_req, res) => {
   const [totalPostings, totalExtracted, totalFailed, topSkillGroups] = await Promise.all([

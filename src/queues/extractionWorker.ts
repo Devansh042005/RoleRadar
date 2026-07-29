@@ -34,34 +34,47 @@ async function processExtractionJob(job: Job<ExtractionJobData>) {
     const sanitizedText = sanitizeJobText(postingRaw.rawText);
     const { result, raw } = await extractSkills(sanitizedText);
 
-    for (const skillName of result.required_skills) {
-      const skill = await normalizeSkill(skillName);
-      await prisma.postingSkill.create({
-        data: { postingId, skillId: skill.id, requirementType: RequirementType.REQUIRED },
-      });
-    }
-
-    for (const skillName of result.nice_to_have_skills) {
-      const skill = await normalizeSkill(skillName);
-      await prisma.postingSkill.create({
-        data: { postingId, skillId: skill.id, requirementType: RequirementType.NICE_TO_HAVE },
-      });
-    }
-
-    await prisma.posting.update({
-      where: { id: postingId },
-      data: {
-        seniority: result.seniority ? (result.seniority.toUpperCase() as Seniority) : null,
-        yearsExperience: result.years_experience,
-        roleCategory: result.role_category.toUpperCase() as RoleCategory,
-        extractionStatus: ExtractionStatus.PROCESSED,
-      },
-    });
-
+    const requiredSkills = await Promise.all(result.required_skills.map(normalizeSkill));
+    const niceToHaveSkills = await Promise.all(result.nice_to_have_skills.map(normalizeSkill));
     const plainRaw = JSON.parse(JSON.stringify(raw)) as Prisma.InputJsonValue;
-    await prisma.postingRaw.update({
-      where: { id: postingRaw.id },
-      data: { extractionRaw: plainRaw },
+
+    // Retries (BullMQ attempts: 3) re-run this job from scratch since extractionStatus only
+    // flips to PROCESSED at the very end. A prior attempt may have already inserted
+    // PostingSkill rows before failing later on, so we clear them before re-inserting and
+    // do the whole write as one transaction — a retry is then a clean replace, never a dupe.
+    await prisma.$transaction(async (tx) => {
+      await tx.postingSkill.deleteMany({ where: { postingId } });
+
+      await tx.postingSkill.createMany({
+        data: [
+          ...requiredSkills.map((skill) => ({
+            postingId,
+            skillId: skill.id,
+            requirementType: RequirementType.REQUIRED,
+          })),
+          ...niceToHaveSkills.map((skill) => ({
+            postingId,
+            skillId: skill.id,
+            requirementType: RequirementType.NICE_TO_HAVE,
+          })),
+        ],
+        skipDuplicates: true,
+      });
+
+      await tx.posting.update({
+        where: { id: postingId },
+        data: {
+          seniority: result.seniority ? (result.seniority.toUpperCase() as Seniority) : null,
+          yearsExperience: result.years_experience,
+          roleCategory: result.role_category.toUpperCase() as RoleCategory,
+          extractionStatus: ExtractionStatus.PROCESSED,
+        },
+      });
+
+      await tx.postingRaw.update({
+        where: { id: postingRaw.id },
+        data: { extractionRaw: plainRaw },
+      });
     });
 
     console.log(
