@@ -1,0 +1,164 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SourceName {
+  REMOTEOK
+  GREENHOUSE
+  LEVER
+  CAREER_PAGE
+}
+
+enum RequirementType {
+  REQUIRED
+  NICE_TO_HAVE
+}
+
+enum ApplicationStage {
+  SAVED
+  APPLIED
+  SCREENING
+  INTERVIEW
+  OFFER
+  REJECTED
+}
+
+enum Proficiency {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum Seniority {
+  JUNIOR
+  MID
+  SENIOR
+  LEAD
+  STAFF
+}
+
+enum RoleCategory {
+  BACKEND
+  FRONTEND
+  FULLSTACK
+  DEVOPS
+  DATA
+  MOBILE
+  AI_ML
+  OTHER
+}
+
+enum ExtractionStatus {
+  PENDING
+  PROCESSED
+  FAILED
+}
+
+model Company {
+  id            String   @id @default(cuid())
+  name          String   @unique
+  careerPageUrl String?
+  createdAt     DateTime @default(now())
+
+  postings Posting[]
+}
+
+model Posting {
+  id               String           @id @default(cuid())
+  companyId        String
+  title            String
+  location         String?
+  sourceUrl        String
+  sourceName       SourceName
+  postedAt         DateTime?
+  rawTextHash      String
+  createdAt        DateTime         @default(now())
+  seniority        Seniority?
+  yearsExperience  Int?
+  roleCategory     RoleCategory?
+  extractionStatus ExtractionStatus @default(PENDING)
+
+  company       Company        @relation(fields: [companyId], references: [id])
+  postingRaws   PostingRaw[]
+  postingSkills PostingSkill[]
+  applications  Application[]
+
+  @@index([rawTextHash])
+  @@index([companyId])
+}
+
+model PostingRaw {
+  id            String   @id @default(cuid())
+  postingId     String
+  rawText       String
+  extractionRaw Json?
+  createdAt     DateTime @default(now())
+
+  posting Posting @relation(fields: [postingId], references: [id])
+
+  @@index([postingId])
+}
+
+model Skill {
+  id       String  @id @default(cuid())
+  name     String  @unique
+  category String?
+
+  postingSkills     PostingSkill[]
+  userSkillProfiles UserSkillProfile[]
+}
+
+model PostingSkill {
+  id              String          @id @default(cuid())
+  postingId       String
+  skillId         String
+  requirementType RequirementType
+  createdAt       DateTime        @default(now())
+
+  posting Posting @relation(fields: [postingId], references: [id])
+  skill   Skill   @relation(fields: [skillId], references: [id])
+
+  @@index([skillId])
+  @@index([postingId])
+}
+
+model Application {
+  id        String           @id @default(cuid())
+  postingId String
+  stage     ApplicationStage @default(SAVED)
+  notes     String?
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  posting      Posting                   @relation(fields: [postingId], references: [id])
+  stageHistory ApplicationStageHistory[]
+
+  @@index([stage])
+}
+
+model ApplicationStageHistory {
+  id            String           @id @default(cuid())
+  applicationId String
+  stage         ApplicationStage
+  changedAt     DateTime         @default(now())
+
+  application Application @relation(fields: [applicationId], references: [id])
+
+  @@index([applicationId])
+}
+
+model UserSkillProfile {
+  id          String      @id @default(cuid())
+  skillId     String
+  proficiency Proficiency
+  createdAt   DateTime    @default(now())
+
+  skill Skill @relation(fields: [skillId], references: [id])
+
+  @@index([skillId])
+}
