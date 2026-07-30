@@ -2,7 +2,10 @@ import axios, { AxiosError } from "axios";
 import { toast } from "sonner";
 import type {
   ApiErrorShape,
+  Application,
+  ApplicationStage,
   CompanyAnalytics,
+  FunnelResponse,
   PostingsResponse,
   RoleCategory,
   TrendingSkill,
@@ -62,5 +65,39 @@ export async function fetchPostings(params: PostingsParams): Promise<PostingsRes
 
 export async function fetchCompanyAnalytics(companyId: string): Promise<CompanyAnalytics> {
   const { data } = await apiClient.get<CompanyAnalytics>(`/api/analytics/company/${companyId}`);
+  return data;
+}
+
+export async function createApplication(postingId: string): Promise<Application> {
+  const { data } = await apiClient.post<Application>("/api/applications", { postingId });
+  return data;
+}
+
+export async function fetchApplications(stage?: ApplicationStage): Promise<Application[]> {
+  const { data } = await apiClient.get<Application[]>("/api/applications", {
+    params: stage ? { stage } : undefined,
+  });
+  return data;
+}
+
+export async function updateApplicationStage(
+  id: string,
+  stage: ApplicationStage,
+): Promise<Application> {
+  const { data } = await apiClient.patch<Application>(`/api/applications/${id}/stage`, { stage });
+  return data;
+}
+
+export async function updateApplicationNotes(id: string, notes: string): Promise<Application> {
+  const { data } = await apiClient.patch<Application>(`/api/applications/${id}/notes`, { notes });
+  return data;
+}
+
+export async function deleteApplication(id: string): Promise<void> {
+  await apiClient.delete(`/api/applications/${id}`);
+}
+
+export async function fetchFunnel(): Promise<FunnelResponse> {
+  const { data } = await apiClient.get<FunnelResponse>("/api/applications/funnel");
   return data;
 }

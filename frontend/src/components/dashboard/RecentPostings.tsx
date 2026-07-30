@@ -1,12 +1,14 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
-import { RefreshCw, MapPin, ExternalLink } from "lucide-react";
+import { useMemo } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { RefreshCw, MapPin, ExternalLink, Bookmark, BookmarkCheck } from "lucide-react";
+import { toast } from "sonner";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { fetchPostings } from "@/lib/api";
+import { SkillBadgeRow } from "@/components/shared/SkillBadgeRow";
+import { createApplication, fetchApplications, fetchPostings } from "@/lib/api";
 
 const POSTINGS_LIMIT = 9;
 
@@ -35,12 +37,58 @@ function PostingCardSkeleton() {
   );
 }
 
+function SaveButton({ postingId, saved }: { postingId: string; saved: boolean }) {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: () => createApplication(postingId),
+    onSuccess: () => {
+      toast.success("Saved to pipeline");
+      queryClient.invalidateQueries({ queryKey: ["applications"] });
+    },
+    onError: () => {
+      toast.error("Couldn't save this posting — try again.");
+    },
+  });
+
+  if (saved) {
+    return (
+      <Button variant="outline" size="sm" disabled className="gap-1.5">
+        <BookmarkCheck className="size-3.5" /> Saved
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      variant="outline"
+      size="sm"
+      className="gap-1.5"
+      disabled={mutation.isPending}
+      onClick={() => mutation.mutate()}
+    >
+      <Bookmark className="size-3.5" /> {mutation.isPending ? "Saving…" : "Save"}
+    </Button>
+  );
+}
+
 export function RecentPostings() {
   const { data, isLoading, isError, refetch } = useQuery({
     queryKey: ["postings", POSTINGS_LIMIT],
     queryFn: () => fetchPostings({ limit: POSTINGS_LIMIT, offset: 0 }),
     staleTime: 60_000,
   });
+
+  const { data: applications } = useQuery({
+    queryKey: ["applications"],
+    queryFn: () => fetchApplications(),
+    staleTime: 30_000,
+  });
+
+  const savedPostingIds = useMemo(
+    () => new Set((applications ?? []).map((app) => app.posting.id)),
+    [applications],
+  );
 
   return (
     <section>
@@ -102,20 +150,8 @@ export function RecentPostings() {
                     <span className="ml-auto">{formatPostedAt(posting.postedAt)}</span>
                   ) : null}
                 </div>
-                {posting.skills.length > 0 ? (
-                  <div className="flex flex-wrap gap-1.5">
-                    {posting.skills.map((skill) => (
-                      <Badge
-                        key={skill.name}
-                        variant={skill.requirementType === "REQUIRED" ? "default" : "outline"}
-                      >
-                        {skill.name}
-                      </Badge>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground italic">Skills not extracted yet</p>
-                )}
+                <SkillBadgeRow skills={posting.skills} />
+                <SaveButton postingId={posting.id} saved={savedPostingIds.has(posting.id)} />
               </CardContent>
             </Card>
           ))}

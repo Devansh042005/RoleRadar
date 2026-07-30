@@ -64,3 +64,40 @@ export interface ApiErrorShape {
   error: string;
   code: string;
 }
+
+// Mirrors /src/routes/applications.ts on the backend.
+export const APPLICATION_STAGES = [
+  "SAVED",
+  "APPLIED",
+  "SCREENING",
+  "INTERVIEW",
+  "OFFER",
+  "REJECTED",
+] as const;
+
+export type ApplicationStage = (typeof APPLICATION_STAGES)[number];
+
+export interface Application {
+  id: string;
+  stage: ApplicationStage;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+  posting: PostingSummary;
+}
+
+export interface FunnelStageCount {
+  stage: ApplicationStage;
+  count: number;
+}
+
+export interface FunnelStageDuration {
+  stage: ApplicationStage;
+  avgSeconds: number | null;
+  transitionCount: number;
+}
+
+export interface FunnelResponse {
+  stageCounts: FunnelStageCount[];
+  avgTimeInStageSeconds: FunnelStageDuration[];
+}
