@@ -3,9 +3,9 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { MapPin, ExternalLink, Bookmark, BookmarkCheck, Sparkles } from "lucide-react";
+import { MapPin, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { SkillBadgeRow } from "@/components/shared/SkillBadgeRow";
@@ -16,24 +16,19 @@ function formatPostedAt(postedAt: string | null) {
   return new Date(postedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
-function matchLabel(similarity: number): string {
-  if (similarity >= 0.7) return "Strong match";
-  if (similarity >= 0.5) return "Good match";
-  return "Possible match";
-}
-
-/** A similarity score bar — the point is that this is meaning-based (cosine
+/** A similarity score readout — the point is that this is meaning-based (cosine
  * similarity over embeddings), not a keyword "X/Y skills match" count. */
 function MatchIndicator({ similarity }: { similarity: number }) {
-  const pct = Math.max(0, Math.min(100, Math.round(similarity * 100)));
+  const score = Math.max(0, Math.min(1, similarity));
+  const pct = Math.round(score * 100);
   return (
     <div className="space-y-1">
-      <div className="flex items-baseline justify-between text-xs">
-        <span className="font-medium">{matchLabel(similarity)}</span>
-        <span className="text-muted-foreground">{pct}% semantic match</span>
+      <div className="flex items-baseline justify-between font-mono text-xs">
+        <span className="text-muted-foreground">MATCH</span>
+        <span className="text-signal">{score.toFixed(2)}</span>
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
-        <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
+      <div className="h-1 w-full bg-surface-2">
+        <div className="h-full bg-signal" style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
@@ -41,16 +36,16 @@ function MatchIndicator({ similarity }: { similarity: number }) {
 
 function RecommendedCardSkeleton() {
   return (
-    <Card>
+    <Card className="rounded-[4px] border-border bg-surface shadow-none">
       <CardHeader className="space-y-2">
-        <Skeleton className="h-4 w-2/3" />
-        <Skeleton className="h-3 w-1/2" />
+        <Skeleton className="h-4 w-2/3 rounded-[4px]" />
+        <Skeleton className="h-3 w-1/2 rounded-[4px]" />
       </CardHeader>
       <CardContent className="space-y-3">
-        <Skeleton className="h-2 w-full" />
+        <Skeleton className="h-2 w-full rounded-[4px]" />
         <div className="flex flex-wrap gap-1.5">
-          <Skeleton className="h-5 w-16 rounded-full" />
-          <Skeleton className="h-5 w-20 rounded-full" />
+          <Skeleton className="h-5 w-16 rounded-[3px]" />
+          <Skeleton className="h-5 w-20 rounded-[3px]" />
         </div>
       </CardContent>
     </Card>
@@ -63,7 +58,7 @@ function SaveButton({ postingId, saved }: { postingId: string; saved: boolean })
   const mutation = useMutation({
     mutationFn: () => createApplication(postingId),
     onSuccess: () => {
-      toast.success("Saved to pipeline");
+      toast.success("Saved to pipeline.");
       queryClient.invalidateQueries({ queryKey: ["applications"] });
     },
     onError: () => toast.error("Couldn't save this posting — try again."),
@@ -71,9 +66,9 @@ function SaveButton({ postingId, saved }: { postingId: string; saved: boolean })
 
   if (saved) {
     return (
-      <Button variant="outline" size="sm" disabled className="gap-1.5">
-        <BookmarkCheck className="size-3.5" /> Saved
-      </Button>
+      <span className="inline-flex h-7 items-center gap-1.5 font-mono text-xs text-positive">
+        SAVED ✓
+      </span>
     );
   }
 
@@ -81,30 +76,25 @@ function SaveButton({ postingId, saved }: { postingId: string; saved: boolean })
     <Button
       variant="outline"
       size="sm"
-      className="gap-1.5"
+      className="rounded-[4px] font-mono text-xs"
       disabled={mutation.isPending}
       onClick={() => mutation.mutate()}
     >
-      <Bookmark className="size-3.5" /> {mutation.isPending ? "Saving…" : "Save"}
+      {mutation.isPending ? "SAVING…" : "SAVE"}
     </Button>
   );
 }
 
 function EmptyProfileState() {
   return (
-    <Card>
-      <CardContent className="flex flex-col items-center gap-3 py-12 text-center">
-        <div className="flex size-10 items-center justify-center rounded-full bg-accent text-accent-foreground">
-          <Sparkles className="size-5" />
-        </div>
-        <div className="space-y-1">
-          <p className="text-sm font-medium">Set up your profile to see recommendations</p>
-          <p className="max-w-xs text-sm text-muted-foreground">
-            We rank postings by meaning against your skills — not just keyword overlap.
-          </p>
-        </div>
-        <Button asChild variant="outline" size="sm">
-          <Link href="/profile">Set up profile</Link>
+    <Card className="rounded-[4px] border-border bg-surface shadow-none">
+      <CardContent className="space-y-3 py-10 text-center">
+        <p className="text-sm text-foreground">No profile yet. Add your skills to see where you stand.</p>
+        <p className="mx-auto max-w-xs text-sm text-muted-foreground">
+          Postings are ranked by meaning against your skills — not keyword overlap.
+        </p>
+        <Button asChild variant="outline" size="sm" className="rounded-[4px]">
+          <Link href="/profile">Add skills</Link>
         </Button>
       </CardContent>
     </Card>
@@ -132,7 +122,9 @@ export function RecommendedPostings() {
   return (
     <section>
       <div className="mb-4 space-y-0.5">
-        <h2 className="text-lg font-semibold tracking-tight">Recommended for you</h2>
+        <h2 className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
+          Recommended
+        </h2>
         <p className="text-sm text-muted-foreground">
           Ranked by meaning — semantic similarity to your profile, not keyword overlap.
         </p>
@@ -145,7 +137,7 @@ export function RecommendedPostings() {
           ))}
         </div>
       ) : isError ? (
-        <Card>
+        <Card className="rounded-[4px] border-border bg-surface shadow-none">
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             Couldn&apos;t load recommendations.
           </CardContent>
@@ -153,7 +145,7 @@ export function RecommendedPostings() {
       ) : !data?.hasProfile ? (
         <EmptyProfileState />
       ) : data.data.length === 0 ? (
-        <Card>
+        <Card className="rounded-[4px] border-border bg-surface shadow-none">
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
             No embedded postings yet — check back once the pipeline has processed some.
           </CardContent>
@@ -161,25 +153,27 @@ export function RecommendedPostings() {
       ) : (
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {data.data.map((posting) => (
-            <Card key={posting.id} className="flex flex-col">
+            <Card key={posting.id} className="flex flex-col rounded-[4px] border-border bg-surface shadow-none">
               <CardHeader className="space-y-1">
                 <div className="flex items-start justify-between gap-2">
-                  <CardTitle className="text-base leading-snug">{posting.title}</CardTitle>
+                  <h3 className="font-display text-base leading-snug font-medium text-foreground">
+                    {posting.title}
+                  </h3>
                   <a
                     href={posting.sourceUrl}
                     target="_blank"
                     rel="noreferrer"
                     aria-label={`Open ${posting.title} posting`}
-                    className="text-muted-foreground hover:text-foreground shrink-0 pt-0.5"
+                    className="shrink-0 pt-0.5 text-muted-foreground hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--signal)]"
                   >
                     <ExternalLink className="size-3.5" />
                   </a>
                 </div>
-                <p className="text-sm text-muted-foreground">{posting.company.name}</p>
+                <p className="font-mono text-xs text-muted-foreground">{posting.company.name}</p>
               </CardHeader>
               <CardContent className="flex flex-1 flex-col justify-between gap-3">
                 <MatchIndicator similarity={posting.similarity} />
-                <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <div className="flex items-center gap-1.5 font-mono text-xs text-muted-foreground">
                   <MapPin className="size-3.5" />
                   <span>{posting.location ?? "Remote / unspecified"}</span>
                   {formatPostedAt(posting.postedAt) ? (

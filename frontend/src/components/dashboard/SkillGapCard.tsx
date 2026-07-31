@@ -1,12 +1,13 @@
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { SkillGapReport } from "@/components/skillgap/SkillGapReport";
 
 export function SkillGapCard() {
   return (
-    <Card>
+    <Card className="rounded-[4px] border-border bg-surface shadow-none">
       <CardHeader>
-        <CardTitle>Your skill gap</CardTitle>
-        <CardDescription>See how your profile stacks up against market demand</CardDescription>
+        <h2 className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
+          Skill gap
+        </h2>
       </CardHeader>
       <CardContent>
         <SkillGapReport compact />

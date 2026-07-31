@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Trash2 } from "lucide-react";
+import { X } from "lucide-react";
 import { toast } from "sonner";
-import { AppHeader } from "@/components/layout/AppHeader";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { AppShell } from "@/components/layout/AppShell";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Select,
@@ -37,6 +36,12 @@ const INVALIDATE_KEYS = [
   ["skill-gap"],
   ["infer-role"],
 ] as const;
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="font-mono text-xs tracking-wide text-muted-foreground uppercase">{children}</p>
+  );
+}
 
 export function ProfilePage() {
   const queryClient = useQueryClient();
@@ -74,7 +79,7 @@ export function ProfilePage() {
   const targetRoleMutation = useMutation({
     mutationFn: (role: string | null) => updateTargetRole(role),
     onSuccess: () => {
-      toast.success("Target role saved");
+      toast.success("Target role saved.");
       invalidateProfileQueries();
     },
     onError: () => toast.error("Couldn't save target role — try again."),
@@ -83,21 +88,21 @@ export function ProfilePage() {
   const displayedTargetRole = (targetRoleTouched ? targetRole : data?.targetRole) ?? "";
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <AppHeader />
-      <main className="mx-auto w-full max-w-3xl flex-1 space-y-6 px-6 py-8">
+    <AppShell>
+      <div className="space-y-8">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Your profile</h1>
-          <p className="text-sm text-muted-foreground">
-            Skills and target role here drive semantic matching and grounded answers in Ask —
-            add what you know and we&apos;ll rank postings by meaning, not just keyword overlap.
+          <h1 className="font-display text-2xl font-medium tracking-tight text-foreground">
+            Profile
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Skills and target role drive semantic matching and grounded answers in Ask — ranked by
+            meaning, not keyword overlap.
           </p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Target role</CardTitle>
-            <CardDescription>What role are you aiming for?</CardDescription>
+        <Card className="rounded-[4px] border-border bg-surface shadow-none">
+          <CardHeader className="gap-1.5">
+            <SectionLabel>Target role</SectionLabel>
           </CardHeader>
           <CardContent className="flex gap-2">
             <Input
@@ -108,9 +113,11 @@ export function ProfilePage() {
                 setTargetRole(e.target.value);
               }}
               disabled={isLoading}
+              className="rounded-[4px] font-mono"
             />
             <Button
               variant="outline"
+              className="rounded-[4px]"
               disabled={targetRoleMutation.isPending}
               onClick={() => targetRoleMutation.mutate(displayedTargetRole || null)}
             >
@@ -119,14 +126,14 @@ export function ProfilePage() {
           </CardContent>
         </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Skills</CardTitle>
-            <CardDescription>
+        <Card className="rounded-[4px] border-border bg-surface shadow-none">
+          <CardHeader className="gap-1.5">
+            <SectionLabel>Skills</SectionLabel>
+            <p className="text-sm text-muted-foreground">
               {data?.hasEmbedding
                 ? "Profile embedding is up to date."
                 : "Add at least one skill or a target role to enable recommendations."}
-            </CardDescription>
+            </p>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="flex flex-wrap gap-2">
@@ -134,21 +141,22 @@ export function ProfilePage() {
                 placeholder="e.g. Node.js"
                 value={skillName}
                 onChange={(e) => setSkillName(e.target.value)}
-                className="max-w-56"
+                className="max-w-56 rounded-[4px] font-mono"
               />
               <Select value={proficiency} onValueChange={(v) => setProficiency(v as Proficiency)}>
-                <SelectTrigger>
+                <SelectTrigger className="rounded-[4px] font-mono">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   {Object.entries(PROFICIENCY_LABELS).map(([value, label]) => (
-                    <SelectItem key={value} value={value}>
+                    <SelectItem key={value} value={value} className="font-mono">
                       {label}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <Button
+                className="rounded-[4px]"
                 disabled={skillName.trim().length === 0 || addSkillMutation.isPending}
                 onClick={() => addSkillMutation.mutate()}
               >
@@ -158,13 +166,16 @@ export function ProfilePage() {
 
             {isLoading ? (
               <div className="flex flex-wrap gap-2">
-                <Skeleton className="h-6 w-24 rounded-full" />
-                <Skeleton className="h-6 w-20 rounded-full" />
+                <Skeleton className="h-6 w-24 rounded-[4px]" />
+                <Skeleton className="h-6 w-20 rounded-[4px]" />
               </div>
             ) : data && data.skills.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {data.skills.map((skill) => (
-                  <Badge key={skill.id} variant="outline" className="gap-1.5 py-1 pr-1">
+                  <span
+                    key={skill.id}
+                    className="inline-flex items-center gap-1.5 rounded-[3px] border border-border py-1 pr-1 pl-2 font-mono text-xs text-foreground"
+                  >
                     {skill.name}
                     <span className="text-muted-foreground">
                       · {PROFICIENCY_LABELS[skill.proficiency].toLowerCase()}
@@ -173,11 +184,11 @@ export function ProfilePage() {
                       type="button"
                       aria-label={`Remove ${skill.name}`}
                       onClick={() => deleteSkillMutation.mutate(skill.id)}
-                      className="ml-0.5 rounded-full p-0.5 hover:bg-muted"
+                      className="rounded-[2px] p-0.5 text-muted-foreground hover:bg-surface-2 hover:text-gap focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--signal)]"
                     >
-                      <Trash2 className="size-3" />
+                      <X className="size-3" />
                     </button>
-                  </Badge>
+                  </span>
                 ))}
               </div>
             ) : (
@@ -185,7 +196,7 @@ export function ProfilePage() {
             )}
           </CardContent>
         </Card>
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }

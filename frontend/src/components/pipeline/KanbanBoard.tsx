@@ -13,7 +13,6 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { RefreshCw } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { KanbanColumn } from "@/components/pipeline/KanbanColumn";
 import { ApplicationCard } from "@/components/pipeline/ApplicationCard";
@@ -101,14 +100,12 @@ export function KanbanBoard() {
 
   if (isError) {
     return (
-      <Card>
-        <CardContent className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-          <p className="text-sm text-muted-foreground">Couldn&apos;t load your pipeline.</p>
-          <Button variant="outline" size="sm" onClick={() => refetch()}>
-            <RefreshCw className="size-3.5" /> Retry
-          </Button>
-        </CardContent>
-      </Card>
+      <div className="flex flex-col items-center justify-center gap-3 border border-border bg-surface py-16 text-center">
+        <p className="text-sm text-muted-foreground">Couldn&apos;t load your pipeline.</p>
+        <Button variant="outline" size="sm" className="rounded-[4px]" onClick={() => refetch()}>
+          <RefreshCw className="size-3.5" /> Retry
+        </Button>
+      </div>
     );
   }
 
