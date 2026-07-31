@@ -1,4 +1,3 @@
-import { Worker, type Job } from 'bullmq';
 import {
   ExtractionStatus,
   Prisma,
@@ -6,17 +5,24 @@ import {
   type Seniority,
   type RoleCategory,
 } from '@prisma/client';
-import { redis } from '../db/redis';
 import { prisma } from '../db/prisma';
-import { sanitizeJobText } from '../services/textSanitizer';
-import { extractSkills } from '../services/skillExtractor';
-import { normalizeSkill } from '../services/skillTaxonomy';
-import { enqueueEmbedding } from './embeddingQueue';
-import { EXTRACTION_QUEUE_NAME, type ExtractionJobData } from './extractionQueue';
+import { sanitizeJobText } from './textSanitizer';
+import { extractSkills } from './skillExtractor';
+import { normalizeSkill } from './skillTaxonomy';
+import { embedPosting } from './embedPosting';
 
-async function processExtractionJob(job: Job<ExtractionJobData>) {
-  const { postingId } = job.data;
-
+/**
+ * Extracts structured skills/seniority/role-category from a posting's raw text via
+ * Claude, then embeds it — previously the skill-extraction BullMQ job's processor
+ * plus its follow-on enqueueEmbedding call, now a single direct function.
+ *
+ * Failures are caught and recorded as ExtractionStatus.FAILED here (mirroring what
+ * the old worker's `on('failed', ...)` handler did after exhausting BullMQ's 3
+ * retries) rather than being rethrown — a bad posting must not abort whoever is
+ * ingesting a whole batch (see ingestPostings.ts), since that isolation is exactly
+ * what per-job queue processing gave for free before.
+ */
+export async function extractPostingSkills(postingId: string): Promise<void> {
   try {
     const posting = await prisma.posting.findUnique({ where: { id: postingId } });
     if (!posting) {
@@ -24,10 +30,10 @@ async function processExtractionJob(job: Job<ExtractionJobData>) {
     }
     if (posting.extractionStatus === ExtractionStatus.PROCESSED) {
       console.log(`[skill-extraction] posting ${postingId} already processed, skipping`);
-      // Extraction was already done (possibly before the embedding queue existed) —
-      // still make sure it gets embedded. enqueueEmbedding is cheap and the embedding
-      // worker's own idempotency check no-ops if it's already embedded.
-      await enqueueEmbedding(postingId);
+      // Extraction was already done (possibly before the embedding step existed) —
+      // still make sure it gets embedded. embedPosting is cheap and no-ops if it's
+      // already embedded.
+      await embedPosting(postingId);
       return;
     }
 
@@ -43,10 +49,9 @@ async function processExtractionJob(job: Job<ExtractionJobData>) {
     const niceToHaveSkills = await Promise.all(result.nice_to_have_skills.map(normalizeSkill));
     const plainRaw = JSON.parse(JSON.stringify(raw)) as Prisma.InputJsonValue;
 
-    // Retries (BullMQ attempts: 3) re-run this job from scratch since extractionStatus only
-    // flips to PROCESSED at the very end. A prior attempt may have already inserted
-    // PostingSkill rows before failing later on, so we clear them before re-inserting and
-    // do the whole write as one transaction — a retry is then a clean replace, never a dupe.
+    // No retries now (BullMQ's attempts: 3 is gone) — a single attempt, but still
+    // written as one transaction so a mid-write crash can't leave partial
+    // PostingSkill rows alongside a still-PENDING extractionStatus.
     await prisma.$transaction(async (tx) => {
       await tx.postingSkill.deleteMany({ where: { postingId } });
 
@@ -88,32 +93,16 @@ async function processExtractionJob(job: Job<ExtractionJobData>) {
 
     // Embed AFTER extraction, never before/in-parallel: the embedding document is
     // built from the extracted skills, so it must be able to read them.
-    await enqueueEmbedding(postingId);
+    await embedPosting(postingId);
   } catch (err) {
     console.error(`[skill-extraction] posting ${postingId} failed:`, err);
-    throw err;
+    await prisma.posting
+      .update({
+        where: { id: postingId },
+        data: { extractionStatus: ExtractionStatus.FAILED },
+      })
+      .catch((updateErr) => {
+        console.error(`[skill-extraction] failed to mark posting ${postingId} as FAILED:`, updateErr);
+      });
   }
 }
-
-export const extractionWorker = new Worker<ExtractionJobData>(
-  EXTRACTION_QUEUE_NAME,
-  processExtractionJob,
-  { connection: redis, concurrency: 5 },
-);
-
-extractionWorker.on('failed', async (job, err) => {
-  if (!job) return;
-
-  const maxAttempts = job.opts.attempts ?? 1;
-  if (job.attemptsMade < maxAttempts) return;
-
-  console.error(`[skill-extraction] job ${job.id} exhausted retries:`, err);
-  await prisma.posting
-    .update({
-      where: { id: job.data.postingId },
-      data: { extractionStatus: ExtractionStatus.FAILED },
-    })
-    .catch((updateErr) => {
-      console.error(`[skill-extraction] failed to mark posting ${job.data.postingId} as FAILED:`, updateErr);
-    });
-});

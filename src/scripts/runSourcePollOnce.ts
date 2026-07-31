@@ -1,23 +1,33 @@
 import 'dotenv/config';
-import { sourcePollQueue } from '../queues/sourcePollQueue';
+import { prisma } from '../db/prisma';
+import { pollSource, isPollableAdapterName, POLLABLE_ADAPTER_NAMES } from '../services/pollSource';
 
-// Enqueues a single, non-repeating source-poll job through the same queue the
-// scheduled 6-hourly polls use — the running worker picks it up immediately.
-// Useful for testing a new adapter without waiting for its cron slot.
+// Runs one adapter's poll directly and waits for it to finish (fetch + ingest +
+// extract + embed) — useful for testing a new adapter without waiting for its
+// external cron slot. Previously enqueued through BullMQ and relied on a running
+// worker to pick it up; now it's just a direct call, same as the HTTP trigger in
+// routes/internalJobs.ts.
 async function main() {
   const adapterName = process.argv[2];
-  if (!adapterName) {
-    console.error('Usage: tsx src/scripts/runSourcePollOnce.ts <ADAPTER_NAME>');
+  if (!adapterName || !isPollableAdapterName(adapterName)) {
+    console.error(
+      `Usage: tsx src/scripts/runSourcePollOnce.ts <${POLLABLE_ADAPTER_NAMES.join('|')}>`,
+    );
     process.exitCode = 1;
     return;
   }
 
-  const job = await sourcePollQueue.add('poll', { adapterName });
-  console.log(`Enqueued one-off source-poll job ${job.id} for adapter "${adapterName}" — watch the worker's logs.`);
+  const summary = await pollSource(adapterName);
+  console.log(
+    `${summary.fetched} postings fetched, ${summary.inserted} new, ${summary.duplicates} duplicates skipped`,
+  );
 }
 
-// Deliberately no sourcePollQueue.close() here — on a queue with repeatable jobs
-// registered (this one has REMOTEOK/GREENHOUSE's 6-hourly schedules), close() hangs
-// waiting on cleanup. The other one-off scripts (backfillEmbeddings.ts, etc.) don't
-// close their queues either and exit fine once main() resolves.
-main();
+main()
+  .catch((err) => {
+    console.error('runSourcePollOnce script failed:', err);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
+  });

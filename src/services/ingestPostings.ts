@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { prisma } from '../db/prisma';
 import type { RawPosting } from '../adapters/types';
-import { enqueueExtraction } from '../queues/extractionQueue';
+import { extractPostingSkills } from './extractPostingSkills';
 
 export interface IngestSummary {
   fetched: number;
@@ -52,7 +52,10 @@ async function ingestPosting(posting: RawPosting): Promise<'inserted' | 'duplica
     return createdPosting;
   });
 
-  await enqueueExtraction(created.id);
+  // Synchronous now (previously: enqueueExtraction, decoupled from this request).
+  // extractPostingSkills catches and records its own failures rather than
+  // throwing, so one bad posting can't abort the rest of this ingest batch.
+  await extractPostingSkills(created.id);
 
   return 'inserted';
 }
@@ -61,6 +64,11 @@ export async function ingestPostings(postings: RawPosting[]): Promise<IngestSumm
   let inserted = 0;
   let duplicates = 0;
 
+  // Sequential, not Promise.all: extraction calls Claude per posting and embedding
+  // runs a local CPU-bound model, so unbounded concurrency here would either blow
+  // through the Ask feature's rate-limit-worthy API budget in a burst or peg the
+  // process. This trades poll latency for predictable resource use — see
+  // pollSource.ts for how a poll's response time is bounded on the caller's side.
   for (const posting of postings) {
     const result = await ingestPosting(posting);
     if (result === 'inserted') {

@@ -10,7 +10,6 @@ import { applicationsRouter } from './routes/applications';
 import { profileRouter } from './routes/profile';
 import { matchingRouter } from './routes/matching';
 import { askRouter } from './routes/ask';
-import { scheduleSourcePolling } from './queues/sourcePollQueue';
 import { requestLogger } from './middleware/requestLogger';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 import { createRateLimiter } from './middleware/rateLimit';
@@ -49,12 +48,17 @@ app.use(askRouter);
 app.use(notFoundHandler);
 app.use(errorHandler);
 
-const server = app.listen(PORT, async () => {
+const server = app.listen(PORT, () => {
   logger.info(`Server listening on port ${PORT}`);
-  await scheduleSourcePolling();
-  logger.info('source-poll repeatable job registered');
 });
 
-// Guards against slow-client / hung-request resource exhaustion.
-server.requestTimeout = 30_000;
-server.headersTimeout = 31_000;
+// No more in-process scheduler (BullMQ's repeatable jobs are gone) — source
+// polling is now triggered by an external cron hitting POST
+// /internal/jobs/poll/:adapterName (see routes/internalJobs.ts), which runs
+// fetch + ingest + extract + embed synchronously within that one request. The
+// timeout ceiling is raised well past the old 30s default to give that request
+// room to finish a batch of new postings; a fronting proxy (Render, etc.) may
+// still impose its own shorter limit — verify against whatever's actually in
+// front of this in production.
+server.requestTimeout = 10 * 60_000;
+server.headersTimeout = 10 * 60_000 + 5_000;
