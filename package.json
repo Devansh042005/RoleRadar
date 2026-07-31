@@ -11,6 +11,7 @@
     "start": "node dist/index.js",
     "lint": "eslint .",
     "test:remoteok": "tsx src/scripts/testRemoteOk.ts",
+    "backfill:embeddings": "tsx src/scripts/backfillEmbeddings.ts",
     "format": "prettier --write .",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
@@ -19,6 +20,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",
     "@prisma/client": "^6.1.0",
+    "@xenova/transformers": "^2.17.2",
     "bullmq": "^5.81.2",
     "cors": "^2.8.6",
     "dotenv": "^16.4.7",

@@ -1,10 +1,16 @@
 import { Router } from 'express';
-import { Prisma } from '@prisma/client';
+import { Prisma, RoleCategory } from '@prisma/client';
 import { prisma } from '../db/prisma';
 import { cached } from '../lib/cache';
 import { asyncHandler } from '../lib/asyncHandler';
 import { notFound } from '../lib/apiError';
-import { parseClampedInt, parseOptionalRoleCategory, parseCuid } from '../lib/queryValidation';
+import {
+  parseClampedInt,
+  parseOptionalRoleCategory,
+  parseRequiredRoleCategory,
+  parseCuid,
+} from '../lib/queryValidation';
+import { inferRoleCategory } from '../services/inferRoleCategory';
 
 export const analyticsRouter = Router();
 
@@ -201,5 +207,120 @@ analyticsRouter.get(
     }
 
     res.json(data);
+  }),
+);
+
+// GET /api/analytics/infer-role
+//
+// Lets the frontend pre-select a RoleCategory before the user has picked anything —
+// the skill-gap endpoint below requires a roleCategory, so this is the chicken-and-egg
+// answer for the initial dropdown value.
+analyticsRouter.get(
+  '/api/analytics/infer-role',
+  asyncHandler(async (_req, res) => {
+    const roleCategory = await inferRoleCategory();
+    res.json({ roleCategory });
+  }),
+);
+
+interface SkillDemandRow {
+  skillId: string;
+  name: string;
+  requiredInCount: number;
+  niceToHaveCount: number;
+  postingCount: number;
+}
+
+// Below this many postings in scope, a covered/gaps report would be reporting noise
+// as signal — return insufficientData instead of a misleading breakdown.
+const MIN_POSTINGS_FOR_GAP_ANALYSIS = 5;
+
+// Market-demand aggregation only — no user profile in here, so this is safe to
+// cache without a user dimension in the key (see the route handler below).
+async function computeMarketDemand(roleCategory: RoleCategory, days: number) {
+  const totalRows = await prisma.$queryRaw<{ total: number }[]>`
+    SELECT COUNT(*)::int AS total
+    FROM "Posting"
+    WHERE "roleCategory" = ${roleCategory}::"RoleCategory"
+      AND "postedAt" >= now() - make_interval(days => ${days}::int)
+  `;
+
+  const demandRows = await prisma.$queryRaw<SkillDemandRow[]>`
+    SELECT
+      s.id AS "skillId",
+      s.name AS name,
+      COUNT(*) FILTER (WHERE ps."requirementType" = 'REQUIRED')::int AS "requiredInCount",
+      COUNT(*) FILTER (WHERE ps."requirementType" = 'NICE_TO_HAVE')::int AS "niceToHaveCount",
+      COUNT(DISTINCT ps."postingId")::int AS "postingCount"
+    FROM "PostingSkill" ps
+    JOIN "Posting" p ON p.id = ps."postingId"
+    JOIN "Skill" s ON s.id = ps."skillId"
+    WHERE p."roleCategory" = ${roleCategory}::"RoleCategory"
+      AND p."postedAt" >= now() - make_interval(days => ${days}::int)
+    GROUP BY s.id, s.name
+  `;
+
+  return { totalPostingsAnalyzed: totalRows[0]?.total ?? 0, demandRows };
+}
+
+// GET /api/analytics/skill-gap
+//
+// Market demand (which skills postings in this role ask for, and how often) is
+// cached per roleCategory+days since it's the same for everyone. The user-diff
+// (which of those skills the profile already has) is computed live on every
+// request — it's cheap, and it means a profile edit is reflected immediately
+// without needing to invalidate anything server-side.
+analyticsRouter.get(
+  '/api/analytics/skill-gap',
+  asyncHandler(async (req, res) => {
+    const roleCategory = parseRequiredRoleCategory(req.query.roleCategory);
+    const days = parseClampedInt(req.query.days, { min: 1, max: 365, fallback: 90 });
+
+    const cacheKey = `analytics:skill-gap-demand:${roleCategory}:${days}`;
+    const { totalPostingsAnalyzed, demandRows } = await cached(cacheKey, 600, () =>
+      computeMarketDemand(roleCategory, days),
+    );
+
+    const inferredDefault = await inferRoleCategory();
+
+    if (totalPostingsAnalyzed < MIN_POSTINGS_FOR_GAP_ANALYSIS) {
+      res.json({
+        roleCategory,
+        totalPostingsAnalyzed,
+        insufficientData: true,
+        inferredDefault,
+        covered: [],
+        gaps: [],
+      });
+      return;
+    }
+
+    const profileSkillIds = new Set(
+      (await prisma.userSkillProfile.findMany({ select: { skillId: true } })).map((row) => row.skillId),
+    );
+
+    const covered: { name: string; demandPct: number }[] = [];
+    const gaps: { name: string; demandPct: number; requiredInCount: number; niceToHaveCount: number }[] = [];
+
+    for (const row of demandRows) {
+      // A 0-1 fraction (same convention as matching.ts's similarity score), not 0-100 —
+      // the frontend multiplies by 100 for display.
+      const demandPct = row.postingCount / totalPostingsAnalyzed;
+      if (profileSkillIds.has(row.skillId)) {
+        covered.push({ name: row.name, demandPct });
+      } else {
+        gaps.push({
+          name: row.name,
+          demandPct,
+          requiredInCount: row.requiredInCount,
+          niceToHaveCount: row.niceToHaveCount,
+        });
+      }
+    }
+
+    covered.sort((a, b) => b.demandPct - a.demandPct);
+    gaps.sort((a, b) => b.demandPct - a.demandPct);
+
+    res.json({ roleCategory, totalPostingsAnalyzed, insufficientData: false, inferredDefault, covered, gaps });
   }),
 );

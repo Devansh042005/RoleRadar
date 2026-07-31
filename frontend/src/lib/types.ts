@@ -101,3 +101,79 @@ export interface FunnelResponse {
   stageCounts: FunnelStageCount[];
   avgTimeInStageSeconds: FunnelStageDuration[];
 }
+
+// Mirrors /src/routes/matching.ts, profile.ts, and ask.ts on the backend — the
+// embeddings/RAG semantic layer.
+export const PROFICIENCIES = ["BEGINNER", "INTERMEDIATE", "ADVANCED"] as const;
+
+export type Proficiency = (typeof PROFICIENCIES)[number];
+
+export interface ProfileSkill {
+  id: string;
+  skillId: string;
+  name: string;
+  proficiency: Proficiency;
+}
+
+export interface ProfileResponse {
+  targetRole: string | null;
+  hasEmbedding: boolean;
+  skills: ProfileSkill[];
+}
+
+export interface RecommendedPosting extends PostingSummary {
+  /** 0-1 cosine similarity to the profile embedding — meaning-based, not a keyword
+   * skill-overlap count. */
+  similarity: number;
+}
+
+export interface RecommendedPostingsResponse {
+  hasProfile: boolean;
+  data: RecommendedPosting[];
+}
+
+export interface AskSource {
+  id: string;
+  title: string;
+  company: string;
+  sourceUrl: string;
+}
+
+export interface AskRetrievedPosting {
+  id: string;
+  title: string;
+  company: string;
+}
+
+export interface AskResponse {
+  answer: string;
+  insufficientData: boolean;
+  sources: AskSource[];
+  retrieved: AskRetrievedPosting[];
+}
+
+// Mirrors /src/routes/analytics.ts's skill-gap + infer-role endpoints and
+// /src/services/inferRoleCategory.ts on the backend.
+export interface SkillGapCoveredSkill {
+  name: string;
+  /** 0-1 fraction of in-scope postings requiring/listing this skill, not 0-100. */
+  demandPct: number;
+}
+
+export interface SkillGapMissingSkill extends SkillGapCoveredSkill {
+  requiredInCount: number;
+  niceToHaveCount: number;
+}
+
+export interface SkillGapResponse {
+  roleCategory: RoleCategory;
+  totalPostingsAnalyzed: number;
+  insufficientData: boolean;
+  inferredDefault: RoleCategory | null;
+  covered: SkillGapCoveredSkill[];
+  gaps: SkillGapMissingSkill[];
+}
+
+export interface InferRoleResponse {
+  roleCategory: RoleCategory | null;
+}

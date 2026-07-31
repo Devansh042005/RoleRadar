@@ -8,6 +8,8 @@ import { ThemeToggle } from "@/components/theme-toggle";
 const NAV_ITEMS = [
   { href: "/", label: "Dashboard" },
   { href: "/pipeline", label: "Pipeline" },
+  { href: "/ask", label: "Ask" },
+  { href: "/profile", label: "Profile" },
 ];
 
 export function AppHeader() {

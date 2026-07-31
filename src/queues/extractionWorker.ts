@@ -11,6 +11,7 @@ import { prisma } from '../db/prisma';
 import { sanitizeJobText } from '../services/textSanitizer';
 import { extractSkills } from '../services/skillExtractor';
 import { normalizeSkill } from '../services/skillTaxonomy';
+import { enqueueEmbedding } from './embeddingQueue';
 import { EXTRACTION_QUEUE_NAME, type ExtractionJobData } from './extractionQueue';
 
 async function processExtractionJob(job: Job<ExtractionJobData>) {
@@ -23,6 +24,10 @@ async function processExtractionJob(job: Job<ExtractionJobData>) {
     }
     if (posting.extractionStatus === ExtractionStatus.PROCESSED) {
       console.log(`[skill-extraction] posting ${postingId} already processed, skipping`);
+      // Extraction was already done (possibly before the embedding queue existed) —
+      // still make sure it gets embedded. enqueueEmbedding is cheap and the embedding
+      // worker's own idempotency check no-ops if it's already embedded.
+      await enqueueEmbedding(postingId);
       return;
     }
 
@@ -80,6 +85,10 @@ async function processExtractionJob(job: Job<ExtractionJobData>) {
     console.log(
       `Posting ${postingId} → extracted ${result.required_skills.length} required skills, ${result.nice_to_have_skills.length} nice-to-have`,
     );
+
+    // Embed AFTER extraction, never before/in-parallel: the embedding document is
+    // built from the extracted skills, so it must be able to read them.
+    await enqueueEmbedding(postingId);
   } catch (err) {
     console.error(`[skill-extraction] posting ${postingId} failed:`, err);
     throw err;
