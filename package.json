@@ -12,6 +12,7 @@
     "lint": "eslint .",
     "test:remoteok": "tsx src/scripts/testRemoteOk.ts",
     "backfill:embeddings": "tsx src/scripts/backfillEmbeddings.ts",
+    "source-poll:once": "tsx src/scripts/runSourcePollOnce.ts",
     "format": "prettier --write .",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",

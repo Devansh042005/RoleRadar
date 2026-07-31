@@ -7,7 +7,7 @@ const NAMED_ENTITIES: Record<string, string> = {
   nbsp: ' ',
 };
 
-function decodeEntities(text: string): string {
+function decodeEntitiesOnce(text: string): string {
   return text.replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, (match, entity: string) => {
     if (entity[0] === '#') {
       const codePoint =
@@ -18,6 +18,23 @@ function decodeEntities(text: string): string {
     }
     return NAMED_ENTITIES[entity] ?? match;
   });
+}
+
+const MAX_DECODE_PASSES = 3;
+
+// Greenhouse's job `content` field (verified against the live API) double-encodes
+// &nbsp; specifically — it appears as literal "&amp;nbsp;" — while tags like &lt;
+// and &quot; are only single-encoded. A single replace() pass can't resolve nested
+// entities it just produced, so decode repeatedly until stable (bounded, since
+// nothing should realistically need more than a couple of passes).
+function decodeEntities(text: string): string {
+  let result = text;
+  for (let i = 0; i < MAX_DECODE_PASSES; i++) {
+    const decoded = decodeEntitiesOnce(result);
+    if (decoded === result) break;
+    result = decoded;
+  }
+  return result;
 }
 
 function stripHtmlTags(text: string): string {

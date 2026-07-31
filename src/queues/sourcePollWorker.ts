@@ -1,6 +1,7 @@
 import { Worker, type Job } from 'bullmq';
 import { redis } from '../db/redis';
 import { RemoteOkAdapter } from '../adapters/remoteOkAdapter';
+import { GreenhouseAdapter } from '../adapters/greenhouseAdapter';
 import { ingestPostings } from '../services/ingestPostings';
 import type { JobSourceAdapter } from '../adapters/types';
 import { SOURCE_POLL_QUEUE_NAME } from './sourcePollQueue';
@@ -11,6 +12,7 @@ interface SourcePollJobData {
 
 const ADAPTERS: Record<string, JobSourceAdapter> = {
   REMOTEOK: RemoteOkAdapter,
+  GREENHOUSE: GreenhouseAdapter,
 };
 
 async function processSourcePollJob(job: Job<SourcePollJobData>) {
