@@ -44,6 +44,15 @@ export async function setProfileEmbedding(profileId: string, vector: number[]): 
   `;
 }
 
+/** Resets the embedding to NULL — used when a profile no longer has any skills or
+ * target role, so it stops being treated as embedded (hasProfileEmbedding) and stops
+ * showing up in similarity search once there's nothing meaningful left to rank against. */
+export async function clearProfileEmbedding(profileId: string): Promise<void> {
+  await prisma.$executeRaw`
+    UPDATE "UserProfile" SET embedding = NULL, "updatedAt" = now() WHERE id = ${profileId}
+  `;
+}
+
 export async function hasProfileEmbedding(profileId: string): Promise<boolean> {
   const rows = await prisma.$queryRaw<{ id: string }[]>`
     SELECT id FROM "UserProfile" WHERE id = ${profileId} AND embedding IS NOT NULL

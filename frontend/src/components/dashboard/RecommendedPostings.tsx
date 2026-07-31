@@ -1,15 +1,35 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { MapPin, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { SkillBadgeRow } from "@/components/shared/SkillBadgeRow";
 import { createApplication, fetchApplications, fetchRecommendedPostings } from "@/lib/api";
+import { ROLE_CATEGORIES, type RoleCategory } from "@/lib/types";
+import { useDebouncedValue } from "@/hooks/use-debounced-value";
+
+const ROLE_LABELS: Record<RoleCategory, string> = {
+  BACKEND: "Backend",
+  FRONTEND: "Frontend",
+  FULLSTACK: "Full-stack",
+  DEVOPS: "DevOps",
+  DATA: "Data",
+  MOBILE: "Mobile",
+  AI_ML: "AI / ML",
+  OTHER: "Other",
+};
 
 function formatPostedAt(postedAt: string | null) {
   if (!postedAt) return null;
@@ -102,9 +122,13 @@ function EmptyProfileState() {
 }
 
 export function RecommendedPostings() {
+  const [roleFilter, setRoleFilter] = useState<RoleCategory | "ALL">("ALL");
+  const debouncedRole = useDebouncedValue(roleFilter, 300);
+  const roleCategory = debouncedRole === "ALL" ? undefined : debouncedRole;
+
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["postings-recommended"],
-    queryFn: () => fetchRecommendedPostings(),
+    queryKey: ["postings-recommended", roleCategory],
+    queryFn: () => fetchRecommendedPostings({ roleCategory }),
     staleTime: 60_000,
   });
 
@@ -121,13 +145,30 @@ export function RecommendedPostings() {
 
   return (
     <section>
-      <div className="mb-4 space-y-0.5">
-        <h2 className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
-          Recommended
-        </h2>
-        <p className="text-sm text-muted-foreground">
-          Ranked by meaning — semantic similarity to your profile, not keyword overlap.
-        </p>
+      <div className="mb-4 flex items-start justify-between gap-4">
+        <div className="space-y-0.5">
+          <h2 className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
+            Recommended
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            Ranked by meaning — semantic similarity to your profile, not keyword overlap.
+          </p>
+        </div>
+        <Select value={roleFilter} onValueChange={(value) => setRoleFilter(value as RoleCategory | "ALL")}>
+          <SelectTrigger className="w-[140px] shrink-0 rounded-[4px] font-mono text-xs" aria-label="Filter by role category">
+            <SelectValue placeholder="All roles" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL" className="font-mono">
+              All roles
+            </SelectItem>
+            {ROLE_CATEGORIES.map((role) => (
+              <SelectItem key={role} value={role} className="font-mono">
+                {ROLE_LABELS[role]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {isLoading ? (
@@ -147,7 +188,9 @@ export function RecommendedPostings() {
       ) : data.data.length === 0 ? (
         <Card className="rounded-[4px] border-border bg-surface shadow-none">
           <CardContent className="py-12 text-center text-sm text-muted-foreground">
-            No embedded postings yet — check back once the pipeline has processed some.
+            {roleCategory
+              ? `No matches in ${ROLE_LABELS[roleCategory].toLowerCase()} yet — try All roles.`
+              : "No embedded postings yet — check back once the pipeline has processed some."}
           </CardContent>
         </Card>
       ) : (

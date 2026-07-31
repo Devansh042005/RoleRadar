@@ -7,7 +7,11 @@ import { createRateLimiter } from '../middleware/rateLimit';
 import { normalizeSkill } from '../services/skillTaxonomy';
 import { embed } from '../services/embeddingService';
 import { buildProfileEmbeddingDocument } from '../services/embeddingDocument';
-import { setProfileEmbedding, hasProfileEmbedding } from '../services/postingVectorSearch';
+import {
+  setProfileEmbedding,
+  clearProfileEmbedding,
+  hasProfileEmbedding,
+} from '../services/postingVectorSearch';
 
 export const profileRouter = Router();
 
@@ -42,7 +46,10 @@ async function recomputeProfileEmbedding(): Promise<void> {
   });
 
   if (document.trim().length === 0) {
-    // No skills and no target role yet — nothing meaningful to embed.
+    // No skills and no target role anymore — nothing meaningful to embed, and any
+    // embedding from a previous state is now stale, so clear it rather than leaving
+    // it in place (hasProfileEmbedding must go false once there's nothing to rank).
+    await clearProfileEmbedding(profile.id);
     return;
   }
 

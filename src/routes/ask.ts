@@ -30,6 +30,19 @@ const ROLE_CATEGORY_TOKENS: Record<string, RoleCategory> = {
   'ai/ml': RoleCategory.AI_ML,
 };
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Whole-word containment, not substring — `.includes()` alone would match a skill
+ * named "R" or "C" (real language names in this DB) inside ordinary words like
+ * "remote" or "fullstack", spuriously narrowing retrieval to just that one skill. */
+function containsWholeWord(haystack: string, word: string): boolean {
+  return new RegExp(`(?:^|[^a-z0-9+#.])${escapeRegExp(word)}(?:$|[^a-z0-9+#.])`, 'i').test(
+    haystack,
+  );
+}
+
 /**
  * Light hybrid retrieval: if the question names a specific skill or role category,
  * pre-filter to postings that reference it before vector-ranking, instead of
@@ -42,7 +55,7 @@ async function detectHybridFilters(
 
   let roleCategory: RoleCategory | undefined;
   for (const [token, category] of Object.entries(ROLE_CATEGORY_TOKENS)) {
-    if (lowerQuestion.includes(token)) {
+    if (containsWholeWord(lowerQuestion, token)) {
       roleCategory = category;
       break;
     }
@@ -50,7 +63,7 @@ async function detectHybridFilters(
 
   const allSkills = await prisma.skill.findMany({ select: { id: true, name: true } });
   const skillIds = allSkills
-    .filter((skill) => lowerQuestion.includes(skill.name.toLowerCase()))
+    .filter((skill) => containsWholeWord(lowerQuestion, skill.name.toLowerCase()))
     .map((skill) => skill.id);
 
   return { roleCategory, skillIds: skillIds.length > 0 ? skillIds : undefined };
