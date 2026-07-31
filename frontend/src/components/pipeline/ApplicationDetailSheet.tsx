@@ -93,7 +93,7 @@ function ApplicationDetailSheetBody({
     mutationFn: (id: string) => deleteApplication(id),
     onError: () => toast.error("Couldn't remove this card — try again."),
     onSuccess: () => {
-      toast.success("Removed from pipeline");
+      toast.success("Removed from pipeline.");
       queryClient.invalidateQueries({ queryKey: ["applications"] });
       queryClient.invalidateQueries({ queryKey: ["funnel"] });
       setDeleteOpen(false);
@@ -105,7 +105,7 @@ function ApplicationDetailSheetBody({
     <>
       <SheetHeader>
         <SheetTitle className="pr-6">{application.posting.title}</SheetTitle>
-        <SheetDescription>
+        <SheetDescription className="font-mono text-xs">
           {application.posting.company.name}
           {application.posting.location ? ` · ${application.posting.location}` : ""}
         </SheetDescription>
@@ -113,19 +113,21 @@ function ApplicationDetailSheetBody({
 
       <div className="flex flex-col gap-4 px-4">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-sm font-medium">Stage</span>
+          <span className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
+            Stage
+          </span>
           <Select
             value={application.stage}
             onValueChange={(value) =>
               stageMutation.mutate({ id: application.id, stage: value as ApplicationStage })
             }
           >
-            <SelectTrigger className="w-[160px]" aria-label="Change stage">
+            <SelectTrigger className="w-[160px] rounded-[4px] font-mono" aria-label="Change stage">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               {STAGE_ORDER.map((stage) => (
-                <SelectItem key={stage} value={stage}>
+                <SelectItem key={stage} value={stage} className="font-mono">
                   {STAGE_LABELS[stage]}
                 </SelectItem>
               ))}
@@ -133,23 +135,23 @@ function ApplicationDetailSheetBody({
           </Select>
         </div>
 
-        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 font-mono text-sm">
           {application.posting.roleCategory ? (
             <>
               <span className="text-muted-foreground">Role</span>
-              <span>{application.posting.roleCategory}</span>
+              <span className="text-foreground">{application.posting.roleCategory}</span>
             </>
           ) : null}
           {application.posting.seniority ? (
             <>
               <span className="text-muted-foreground">Seniority</span>
-              <span>{application.posting.seniority}</span>
+              <span className="text-foreground">{application.posting.seniority}</span>
             </>
           ) : null}
           {formatDate(application.posting.postedAt) ? (
             <>
               <span className="text-muted-foreground">Posted</span>
-              <span>{formatDate(application.posting.postedAt)}</span>
+              <span className="text-foreground">{formatDate(application.posting.postedAt)}</span>
             </>
           ) : null}
         </div>
@@ -160,13 +162,13 @@ function ApplicationDetailSheetBody({
           href={application.posting.sourceUrl}
           target="_blank"
           rel="noreferrer"
-          className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+          className="inline-flex items-center gap-1.5 font-mono text-sm text-signal hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--signal)]"
         >
           View original posting <ExternalLink className="size-3.5" />
         </a>
 
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="application-notes" className="text-sm font-medium">
+          <label htmlFor="application-notes" className="text-sm font-medium text-foreground">
             Notes
           </label>
           <Textarea
@@ -175,6 +177,7 @@ function ApplicationDetailSheetBody({
             onChange={(event) => setNotes(event.target.value)}
             placeholder="Referral, interview prep, follow-up dates…"
             rows={6}
+            className="rounded-[4px] font-mono"
           />
         </div>
       </div>
@@ -182,11 +185,11 @@ function ApplicationDetailSheetBody({
       <SheetFooter className="mt-auto">
         <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
           <AlertDialogTrigger asChild>
-            <Button variant="outline" className="text-destructive hover:text-destructive">
+            <Button variant="outline" className="rounded-[4px] text-gap hover:text-gap">
               <Trash2 className="size-3.5" /> Remove from pipeline
             </Button>
           </AlertDialogTrigger>
-          <AlertDialogContent>
+          <AlertDialogContent className="rounded-[4px]">
             <AlertDialogHeader>
               <AlertDialogTitle>Remove this application?</AlertDialogTitle>
               <AlertDialogDescription>
@@ -194,8 +197,9 @@ function ApplicationDetailSheetBody({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogCancel className="rounded-[4px]">Cancel</AlertDialogCancel>
               <AlertDialogAction
+                className="rounded-[4px]"
                 onClick={() => deleteMutation.mutate(application.id)}
                 disabled={deleteMutation.isPending}
               >
@@ -218,7 +222,7 @@ export function ApplicationDetailSheet({
 }) {
   return (
     <Sheet open={!!application} onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="flex flex-col gap-6 overflow-y-auto sm:max-w-md">
+      <SheetContent className="flex flex-col gap-6 overflow-y-auto border-border bg-surface sm:max-w-md">
         {application ? (
           <ApplicationDetailSheetBody key={application.id} application={application} onClose={onClose} />
         ) : null}

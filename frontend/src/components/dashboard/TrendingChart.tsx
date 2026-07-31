@@ -86,7 +86,7 @@ export function TrendingChart() {
     staleTime: 60_000,
   });
 
-  const rows = data ?? [];
+  const rows = useMemo(() => data ?? [], [data]);
   const maxCount = useMemo(() => Math.max(1, ...rows.map((row) => row.count)), [rows]);
 
   const chartData = useMemo(

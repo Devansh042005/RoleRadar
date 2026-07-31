@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import { ExternalLink, Loader2, Send, Sparkles } from "lucide-react";
-import { AppHeader } from "@/components/layout/AppHeader";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { ExternalLink, Send } from "lucide-react";
+import { AppShell } from "@/components/layout/AppShell";
+import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { askQuestion } from "@/lib/api";
@@ -18,10 +18,33 @@ const EXAMPLE_QUESTIONS = [
   "What's the most in-demand skill across all postings?",
 ];
 
+// Reflects the two real steps inside the /api/ask endpoint (retrieve relevant
+// postings, then generate an answer from them) — the backend doesn't stream
+// intermediate progress, so this is a fixed-delay approximation of where the
+// request actually is, not fabricated data.
+const RETRIEVING_TO_GENERATING_MS = 1100;
+
+function RagLoadingIndicator() {
+  const [step, setStep] = useState<"retrieving" | "generating">("retrieving");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setStep("generating"), RETRIEVING_TO_GENERATING_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  return (
+    <div className="flex items-center gap-2 border border-border bg-surface px-4 py-6 font-mono text-sm text-muted-foreground">
+      <span className="text-signal">›</span>
+      {step === "retrieving" ? "RETRIEVING…" : "GENERATING…"}
+    </div>
+  );
+}
+
 export function AskPanel() {
   const [question, setQuestion] = useState("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [result, setResult] = useState<AskResponse | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const mutation = useMutation({
     mutationFn: (q: string) => askQuestion(q),
@@ -49,32 +72,36 @@ export function AskPanel() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col">
-      <AppHeader />
-      <main className="mx-auto w-full max-w-3xl flex-1 space-y-6 px-6 py-8">
+    <AppShell>
+      <div className="space-y-6">
         <div>
-          <h1 className="text-lg font-semibold tracking-tight">Ask</h1>
-          <p className="text-sm text-muted-foreground">
-            Ask questions in plain English — answers are generated from the actual job postings
-            in your database, with sources cited below the answer.
+          <h1 className="font-display text-2xl font-medium tracking-tight text-foreground">Ask</h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Ask questions in plain English — answers are generated from the actual job postings in
+            your database, with sources cited below the answer.
           </p>
         </div>
 
-        <Card>
+        <Card className="rounded-[4px] border-border bg-surface shadow-none">
           <CardContent className="space-y-3 pt-6">
-            <Textarea
-              placeholder="Ask a question about the job postings in your database…"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  submit(question);
-                }
-              }}
-              rows={3}
-            />
-            <div className="flex items-center justify-between">
+            <div className="flex items-start gap-2">
+              <span className="pt-2 font-mono text-signal select-none">›</span>
+              <Textarea
+                ref={inputRef}
+                placeholder="Ask a question about the job postings in your database…"
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    submit(question);
+                  }
+                }}
+                rows={3}
+                className="rounded-[4px] border-none bg-transparent px-0 font-mono shadow-none focus-visible:ring-0"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-3">
               <div className="flex flex-wrap gap-1.5">
                 {EXAMPLE_QUESTIONS.map((example) => (
                   <button
@@ -82,22 +109,18 @@ export function AskPanel() {
                     type="button"
                     onClick={() => submit(example)}
                     disabled={mutation.isPending}
-                    className="rounded-full border border-border px-2.5 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-50"
+                    className="border border-border px-2.5 py-1 font-mono text-xs text-muted-foreground transition-colors hover:bg-surface-2 hover:text-foreground disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--signal)]"
                   >
                     {example}
                   </button>
                 ))}
               </div>
               <Button
-                className="gap-1.5"
+                className="shrink-0 gap-1.5 rounded-[4px]"
                 disabled={question.trim().length === 0 || mutation.isPending}
                 onClick={() => submit(question)}
               >
-                {mutation.isPending ? (
-                  <Loader2 className="size-3.5 animate-spin" />
-                ) : (
-                  <Send className="size-3.5" />
-                )}
+                <Send className="size-3.5" />
                 Ask
               </Button>
             </div>
@@ -105,30 +128,24 @@ export function AskPanel() {
         </Card>
 
         {mutation.isPending ? (
-          <Card>
-            <CardContent className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-              <Loader2 className="size-4 animate-spin" />
-              Retrieving relevant postings and generating an answer…
-            </CardContent>
-          </Card>
+          <RagLoadingIndicator />
         ) : errorMessage ? (
-          <Card>
-            <CardContent className="py-8 text-center text-sm text-muted-foreground">
-              {errorMessage}
-            </CardContent>
-          </Card>
+          <div className="border border-border bg-surface px-4 py-8 text-center text-sm text-muted-foreground">
+            {errorMessage}
+          </div>
         ) : result ? (
           <div className="space-y-4">
-            <Card>
+            <Card className="rounded-[4px] border-border bg-surface shadow-none">
               <CardHeader>
-                <CardTitle className="flex items-center gap-1.5 text-base">
-                  <Sparkles className="size-4 text-muted-foreground" />
+                <h2 className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
                   Answer
-                </CardTitle>
+                </h2>
               </CardHeader>
               <CardContent className="space-y-2">
-                <p className="text-sm leading-relaxed whitespace-pre-wrap">{result.answer}</p>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-sm leading-relaxed whitespace-pre-wrap text-foreground">
+                  {result.answer}
+                </p>
+                <p className="font-mono text-xs text-muted-foreground">
                   Grounded in {result.retrieved.length} retrieved posting
                   {result.retrieved.length === 1 ? "" : "s"} from your database — not general
                   knowledge.
@@ -138,7 +155,9 @@ export function AskPanel() {
 
             {result.sources.length > 0 ? (
               <div className="space-y-2">
-                <h3 className="text-sm font-medium text-muted-foreground">Cited sources</h3>
+                <h3 className="font-mono text-xs tracking-wide text-muted-foreground uppercase">
+                  Cited sources
+                </h3>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {result.sources.map((source) => (
                     <a
@@ -146,11 +165,13 @@ export function AskPanel() {
                       href={source.sourceUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm transition-colors hover:bg-muted"
+                      className="flex items-center justify-between gap-2 border border-border px-3 py-2 text-sm transition-colors hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--signal)]"
                     >
                       <span className="min-w-0">
-                        <span className="block truncate font-medium">{source.title}</span>
-                        <span className="block truncate text-xs text-muted-foreground">
+                        <span className="block truncate font-medium text-foreground">
+                          {source.title}
+                        </span>
+                        <span className="block truncate font-mono text-xs text-muted-foreground">
                           {source.company}
                         </span>
                       </span>
@@ -162,7 +183,7 @@ export function AskPanel() {
             ) : null}
           </div>
         ) : null}
-      </main>
-    </div>
+      </div>
+    </AppShell>
   );
 }
