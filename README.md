@@ -16,38 +16,22 @@ Most job boards let you bookmark postings. RoleRadar reads them: every posting i
 
 ## Architecture
 
-\`\`\`
-                          ┌─────────────────────┐
-   External cron  ─POST─▶ │ /internal/jobs/poll  │
-   (see Deployment)       │  /:adapterName       │
-                          └──────────┬───────────┘
-                                     │  runs synchronously, in one request
-                                     ▼
-                     ┌───────────────────────────────┐
-                     │ Adapter (RemoteOK / Greenhouse) │──▶ fetch postings
-                     └───────────────┬───────────────┘
-                                     ▼
-                     ┌───────────────────────────────┐
-                     │ ingestPostings                  │──▶ dedupe (rawTextHash),
-                     │                                  │    upsert Company, insert
-                     └───────────────┬───────────────┘    Posting + PostingRaw
-                                     ▼
-                     ┌───────────────────────────────┐
-                     │ extractPostingSkills            │──▶ Claude Haiku, JSON-
-                     │  (skillExtractor + taxonomy)     │    schema-enforced output
-                     └───────────────┬───────────────┘
-                                     ▼
-                     ┌───────────────────────────────┐
-                     │ embedPosting                    │──▶ local embedding model,
-                     │  (embeddingService)              │    written to pgvector
-                     └───────────────────────────────┘
+```mermaid
+flowchart TD
+    A[External cron] -->|POST| B["/internal/jobs/poll/:adapterName"]
+    B -->|runs synchronously, in one request| C["Adapter (RemoteOK / Greenhouse)"]
+    C -->|fetch postings| D[ingestPostings]
+    D -->|"dedupe (rawTextHash), upsert Company,<br/>insert Posting + PostingRaw"| E[extractPostingSkills]
+    E -->|"Claude Haiku, JSON-schema-enforced output<br/>(skillExtractor + taxonomy)"| F[embedPosting]
+    F -->|"local embedding model<br/>(embeddingService)"| G[(pgvector)]
+```
 
-   ┌────────────┐      ┌──────────────────┐      ┌────────────────────┐
-   │  Next.js    │─────▶│  Express API      │─────▶│  PostgreSQL (Neon)  │
-   │  frontend   │◀─────│  (rate-limited,   │◀─────│  + pgvector          │
-   │             │      │   Redis-cached)   │      │  Redis (cache + RL) │
-   └────────────┘      └──────────────────┘      └────────────────────┘
-\`\`\`
+```mermaid
+flowchart LR
+    FE["Next.js frontend"] -->|requests| API["Express API<br/>(rate-limited, Redis-cached)"]
+    API --> DB[("PostgreSQL / Neon<br/>+ pgvector")]
+    API --> RD[("Redis<br/>(cache + rate limiting)")]
+```
 
 ### Why there's no background worker
 
