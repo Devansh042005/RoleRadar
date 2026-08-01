@@ -10,6 +10,7 @@ import { sanitizeJobText } from './textSanitizer';
 import { extractSkills } from './skillExtractor';
 import { normalizeSkill } from './skillTaxonomy';
 import { embedPosting } from './embedPosting';
+import { chunkAndEmbedPosting } from './chunkAndEmbedPosting';
 
 /**
  * Extracts structured skills/seniority/role-category from a posting's raw text via
@@ -34,6 +35,7 @@ export async function extractPostingSkills(postingId: string): Promise<void> {
       // still make sure it gets embedded. embedPosting is cheap and no-ops if it's
       // already embedded.
       await embedPosting(postingId);
+      await chunkAndEmbedPosting(postingId);
       return;
     }
 
@@ -94,6 +96,9 @@ export async function extractPostingSkills(postingId: string): Promise<void> {
     // Embed AFTER extraction, never before/in-parallel: the embedding document is
     // built from the extracted skills, so it must be able to read them.
     await embedPosting(postingId);
+    // Chunk-level embedding for /api/ask's retrieval — additive alongside the
+    // whole-posting embedding above, not a replacement for it.
+    await chunkAndEmbedPosting(postingId);
   } catch (err) {
     console.error(`[skill-extraction] posting ${postingId} failed:`, err);
     await prisma.posting

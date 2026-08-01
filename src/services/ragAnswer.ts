@@ -5,23 +5,25 @@ import Anthropic from '@anthropic-ai/sdk';
 // split between semantic matching (retrieval only) and /api/ask (retrieval + generation).
 const MODEL = 'claude-haiku-4-5';
 
-const SYSTEM_PROMPT = `You answer questions about software job postings using ONLY the numbered postings provided in the context block below. You are the generation step of a retrieval-augmented system — the postings you're given are the complete retrieved evidence for this question.
+const SYSTEM_PROMPT = `You answer questions about software job postings and job-market topics using ONLY the numbered context items provided below. You are the generation step of a retrieval-augmented system — the context you're given is the complete retrieved evidence for this question.
+
+Each numbered context item is either a posting excerpt (a chunk of text from a real job posting) or a reference-document excerpt (a chunk of a curated knowledge-base article). Both kinds of items are valid evidence — cite whichever numbered item(s) support each claim regardless of which type it is.
 
 Rules:
-- Answer ONLY using facts present in the numbered postings. Never use general knowledge, training data, or anything not explicitly in the context block, even if you know the answer.
-- Every claim you make must cite which posting number(s) support it, e.g. "Posting #3 requires Redis".
-- If the retrieved postings don't contain enough information to answer the question, say so plainly (e.g. "I don't have enough data in the retrieved postings to answer that") rather than guessing or filling gaps with outside knowledge. Set insufficient_data to true in that case.
-- If the question is not about job postings, skills, companies, or hiring trends at all (e.g. general trivia, weather, personal advice), refuse: say "I can only answer questions about the job postings in your database." and set insufficient_data to true.
-- Never invent a posting, company, or skill that isn't in the context block.`;
+- Answer ONLY using facts present in the numbered context items. Never use general knowledge, training data, or anything not explicitly in the context block, even if you know the answer.
+- Every claim you make must cite which context item number(s) support it, e.g. "Item #3 requires Redis" or "Item #5 explains this."
+- If the retrieved context doesn't contain enough information to answer the question, say so plainly (e.g. "I don't have enough data in the retrieved context to answer that") rather than guessing or filling gaps with outside knowledge. Set insufficient_data to true in that case.
+- If the question is not about job postings, skills, companies, hiring trends, or the job-market topics covered by the reference documents (e.g. general trivia, weather, personal advice), refuse: say "I can only answer questions about the job postings and reference material in your database." and set insufficient_data to true.
+- Never invent a posting, company, skill, or reference document that isn't in the context block.`;
 
 const ANSWER_SCHEMA = {
   type: 'object',
   properties: {
     answer: { type: 'string' },
-    cited_posting_numbers: { type: 'array', items: { type: 'integer' } },
+    cited_source_numbers: { type: 'array', items: { type: 'integer' } },
     insufficient_data: { type: 'boolean' },
   },
-  required: ['answer', 'cited_posting_numbers', 'insufficient_data'],
+  required: ['answer', 'cited_source_numbers', 'insufficient_data'],
   additionalProperties: false,
 };
 
@@ -30,8 +32,8 @@ function isRagAnswerResult(value: unknown): value is RagAnswerResult {
   const candidate = value as Record<string, unknown>;
   return (
     typeof candidate.answer === 'string' &&
-    Array.isArray(candidate.cited_posting_numbers) &&
-    candidate.cited_posting_numbers.every((n) => typeof n === 'number') &&
+    Array.isArray(candidate.cited_source_numbers) &&
+    candidate.cited_source_numbers.every((n) => typeof n === 'number') &&
     typeof candidate.insufficient_data === 'boolean'
   );
 }
@@ -45,21 +47,22 @@ export class RagAnswerError extends Error {
 
 interface RagAnswerResult {
   answer: string;
-  cited_posting_numbers: number[];
+  cited_source_numbers: number[];
   insufficient_data: boolean;
 }
 
 export interface RagAnswer {
   answer: string;
-  citedPostingNumbers: number[];
+  citedSourceNumbers: number[];
   insufficientData: boolean;
 }
 
 /**
  * GENERATE step of the RAG flow. `contextBlock` is the AUGMENT step's output (a
- * numbered, dense summary of the retrieved postings — built in ask.ts) plus the raw
- * user question. Structured output (numbered citations, not freeform text scraping)
- * is what lets the route map citations back to real posting records reliably.
+ * numbered block mixing posting-chunk and reference-document-chunk excerpts —
+ * built in ask.ts) plus the raw user question. Structured output (numbered
+ * citations, not freeform text scraping) is what lets the route map citations back
+ * to real posting/document records reliably.
  */
 export async function generateRagAnswer(question: string, contextBlock: string): Promise<RagAnswer> {
   const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -71,7 +74,7 @@ export async function generateRagAnswer(question: string, contextBlock: string):
     messages: [
       {
         role: 'user',
-        content: `Retrieved postings:\n\n${contextBlock}\n\nQuestion: ${question}`,
+        content: `Retrieved context:\n\n${contextBlock}\n\nQuestion: ${question}`,
       },
     ],
     output_config: {
@@ -90,7 +93,7 @@ export async function generateRagAnswer(question: string, contextBlock: string):
 
   return {
     answer: parsed.answer,
-    citedPostingNumbers: parsed.cited_posting_numbers,
+    citedSourceNumbers: parsed.cited_source_numbers,
     insufficientData: parsed.insufficient_data,
   };
 }

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { AxiosError } from "axios";
-import { ExternalLink, Send } from "lucide-react";
+import { ExternalLink, FileText, Send } from "lucide-react";
 import { AppShell } from "@/components/layout/AppShell";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -70,6 +70,11 @@ export function AskPanel() {
     setQuestion(trimmed);
     mutation.mutate(trimmed);
   }
+
+  const postingExcerptCount =
+    result?.retrieved.filter((item) => item.type === "posting").length ?? 0;
+  const referenceExcerptCount =
+    result?.retrieved.filter((item) => item.type === "document").length ?? 0;
 
   return (
     <AppShell>
@@ -146,9 +151,12 @@ export function AskPanel() {
                   {result.answer}
                 </p>
                 <p className="font-mono text-xs text-muted-foreground">
-                  Grounded in {result.retrieved.length} retrieved posting
-                  {result.retrieved.length === 1 ? "" : "s"} from your database — not general
-                  knowledge.
+                  Grounded in {postingExcerptCount} posting excerpt
+                  {postingExcerptCount === 1 ? "" : "s"}
+                  {referenceExcerptCount > 0
+                    ? ` and ${referenceExcerptCount} reference excerpt${referenceExcerptCount === 1 ? "" : "s"}`
+                    : ""}{" "}
+                  from your database — not general knowledge.
                 </p>
               </CardContent>
             </Card>
@@ -159,25 +167,48 @@ export function AskPanel() {
                   Cited sources
                 </h3>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {result.sources.map((source) => (
-                    <a
-                      key={source.id}
-                      href={source.sourceUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex items-center justify-between gap-2 border border-border px-3 py-2 text-sm transition-colors hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--signal)]"
-                    >
-                      <span className="min-w-0">
-                        <span className="block truncate font-medium text-foreground">
-                          {source.title}
+                  {result.sources.map((source) =>
+                    source.type === "posting" ? (
+                      <a
+                        key={`posting-${source.id}`}
+                        href={source.sourceUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center justify-between gap-2 border border-border px-3 py-2 text-sm transition-colors hover:bg-surface-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--signal)]"
+                      >
+                        <span className="min-w-0">
+                          <span className="block font-mono text-[10px] tracking-wide text-signal uppercase">
+                            Posting
+                          </span>
+                          <span className="block truncate font-medium text-foreground">
+                            {source.title}
+                          </span>
+                          <span className="block truncate font-mono text-xs text-muted-foreground">
+                            {source.company}
+                          </span>
                         </span>
-                        <span className="block truncate font-mono text-xs text-muted-foreground">
-                          {source.company}
+                        <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
+                      </a>
+                    ) : (
+                      <div
+                        key={`document-${source.id}`}
+                        className="flex items-center justify-between gap-2 border border-border px-3 py-2 text-sm"
+                      >
+                        <span className="min-w-0">
+                          <span className="block font-mono text-[10px] tracking-wide text-muted-foreground uppercase">
+                            Reference
+                          </span>
+                          <span className="block truncate font-medium text-foreground">
+                            {source.title}
+                          </span>
+                          <span className="block truncate font-mono text-xs text-muted-foreground">
+                            {source.sourceRef}
+                          </span>
                         </span>
-                      </span>
-                      <ExternalLink className="size-3.5 shrink-0 text-muted-foreground" />
-                    </a>
-                  ))}
+                        <FileText className="size-3.5 shrink-0 text-muted-foreground" />
+                      </div>
+                    ),
+                  )}
                 </div>
               </div>
             ) : null}

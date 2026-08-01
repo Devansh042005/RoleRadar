@@ -132,24 +132,43 @@ export interface RecommendedPostingsResponse {
   data: RecommendedPosting[];
 }
 
-export interface AskSource {
+export interface AskPostingSource {
+  type: "posting";
   id: string;
   title: string;
   company: string;
   sourceUrl: string;
 }
 
+export interface AskDocumentSource {
+  type: "document";
+  id: string;
+  title: string;
+  sourceRef: string;
+}
+
+export type AskSource = AskPostingSource | AskDocumentSource;
+
 export interface AskRetrievedPosting {
+  type: "posting";
   id: string;
   title: string;
   company: string;
 }
 
+export interface AskRetrievedDocument {
+  type: "document";
+  id: string;
+  title: string;
+}
+
+export type AskRetrievedItem = AskRetrievedPosting | AskRetrievedDocument;
+
 export interface AskResponse {
   answer: string;
   insufficientData: boolean;
   sources: AskSource[];
-  retrieved: AskRetrievedPosting[];
+  retrieved: AskRetrievedItem[];
 }
 
 // Mirrors /src/routes/analytics.ts's skill-gap + infer-role endpoints and

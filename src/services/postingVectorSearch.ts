@@ -85,13 +85,22 @@ export interface FindSimilarPostingsParams {
   limit: number;
 }
 
-/** SQL-filter + vector-rank hybrid search over postings with a non-null embedding. */
-export async function findSimilarPostings({
-  vectorSql,
+export interface PostingHybridFilters {
+  roleCategoryFilter: Prisma.Sql;
+  skillFilter: Prisma.Sql;
+}
+
+/** Builds the optional roleCategory/skillId SQL filters shared by every postings
+ * hybrid search — findSimilarPostings here, and findSimilarPostingChunks in
+ * chunkVectorSearch.ts — so the two can't drift apart. Both filters assume a `p`
+ * alias for the "Posting" table in the caller's query. */
+export function buildPostingHybridFilters({
   roleCategory,
   skillIds,
-  limit,
-}: FindSimilarPostingsParams): Promise<SimilarPostingRow[]> {
+}: {
+  roleCategory?: string;
+  skillIds?: string[];
+}): PostingHybridFilters {
   const roleCategoryFilter = roleCategory
     ? Prisma.sql`AND p."roleCategory" = ${roleCategory}::"RoleCategory"`
     : Prisma.empty;
@@ -102,6 +111,18 @@ export async function findSimilarPostings({
           SELECT DISTINCT ps."postingId" FROM "PostingSkill" ps WHERE ps."skillId" IN (${Prisma.join(skillIds)})
         )`
       : Prisma.empty;
+
+  return { roleCategoryFilter, skillFilter };
+}
+
+/** SQL-filter + vector-rank hybrid search over postings with a non-null embedding. */
+export async function findSimilarPostings({
+  vectorSql,
+  roleCategory,
+  skillIds,
+  limit,
+}: FindSimilarPostingsParams): Promise<SimilarPostingRow[]> {
+  const { roleCategoryFilter, skillFilter } = buildPostingHybridFilters({ roleCategory, skillIds });
 
   return prisma.$queryRaw<SimilarPostingRow[]>`
     SELECT

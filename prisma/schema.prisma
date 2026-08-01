@@ -93,11 +93,57 @@ model Posting {
   postingRaws   PostingRaw[]
   postingSkills PostingSkill[]
   applications  Application[]
+  chunks        PostingChunk[]
 
   @@index([rawTextHash])
   @@index([companyId])
   @@index([postedAt])
   @@index([roleCategory, postedAt])
+}
+
+// Chunked posting text for RAG retrieval (src/routes/ask.ts) — separate from
+// Posting.embedding, which stays a single whole-posting vector used only by
+// findSimilarPostings / /api/postings/recommended (retrieval-only matching).
+model PostingChunk {
+  id         String   @id @default(cuid())
+  postingId  String
+  chunkIndex Int
+  text       String
+  createdAt  DateTime @default(now())
+  embedding  Unsupported("vector(384)")?
+
+  posting Posting @relation(fields: [postingId], references: [id], onDelete: Cascade)
+
+  @@unique([postingId, chunkIndex])
+  @@index([postingId])
+}
+
+// A curated reference-document corpus (see /knowledge-base), chunked and embedded
+// the same way as postings, so /api/ask can retrieve from either source.
+model KnowledgeDocument {
+  id        String   @id @default(cuid())
+  title     String
+  sourceRef String   // relative path of the source markdown file, for re-ingestion / traceability
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  chunks DocumentChunk[]
+
+  @@unique([sourceRef])
+}
+
+model DocumentChunk {
+  id         String   @id @default(cuid())
+  documentId String
+  chunkIndex Int
+  text       String
+  createdAt  DateTime @default(now())
+  embedding  Unsupported("vector(384)")?
+
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@unique([documentId, chunkIndex])
+  @@index([documentId])
 }
 
 model PostingRaw {
