@@ -1,5 +1,6 @@
 import { Prisma, RoleCategory } from '@prisma/client';
 import { prisma } from '../db/prisma';
+import { detectRoleCategoryFromText } from '../lib/roleCategoryTokens';
 
 interface RoleScoreRow {
   roleCategory: RoleCategory;
@@ -21,12 +22,23 @@ const MIN_TOTAL_SCORE = 3;
 const MIN_TOP_SHARE = 0.4;
 
 /**
- * Infers which RoleCategory the current profile's skills are most associated with,
- * via a single aggregated query over PostingSkill joined to Posting. Returns null
- * when the profile has no skills, no matching postings, or the evidence is too
- * thin/evenly spread to trust a default.
+ * Infers which RoleCategory the current profile is targeting. The profile's own
+ * free-text targetRole (e.g. "Frontend Engineer") is checked FIRST and wins
+ * outright if it names a category — it's a direct, explicit signal from the user,
+ * stronger than any inference. Only when that's absent or doesn't name a
+ * recognizable category does this fall back to inferring from skill-demand
+ * overlap: which RoleCategory's postings most often ask for this profile's
+ * skills, via a single aggregated query over PostingSkill joined to Posting.
+ * Returns null when neither signal is available or the skill-demand evidence is
+ * too thin/evenly spread to trust a default.
  */
 export async function inferRoleCategory(): Promise<RoleCategory | null> {
+  const profile = await prisma.userProfile.findFirst();
+  const fromTargetRole = profile?.targetRole
+    ? (detectRoleCategoryFromText(profile.targetRole) ?? null)
+    : null;
+  if (fromTargetRole) return fromTargetRole;
+
   const profileSkills = await prisma.userSkillProfile.findMany({ select: { skillId: true } });
   const skillIds = profileSkills.map((row) => row.skillId);
   if (skillIds.length === 0) return null;

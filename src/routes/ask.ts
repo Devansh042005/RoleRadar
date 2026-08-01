@@ -8,6 +8,7 @@ import { embed } from '../services/embeddingService';
 import { findSimilarPostings, vectorLiteralSql } from '../services/postingVectorSearch';
 import { generateRagAnswer, RagAnswerError } from '../services/ragAnswer';
 import { badRequest } from '../lib/apiError';
+import { containsWholeWord, detectRoleCategoryFromText } from '../lib/roleCategoryTokens';
 
 export const askRouter = Router();
 
@@ -16,32 +17,6 @@ export const askRouter = Router();
 const askRateLimiter = createRateLimiter({ keyPrefix: 'rl:ask', points: 10, duration: 60 });
 
 const RETRIEVAL_LIMIT = 10;
-
-const ROLE_CATEGORY_TOKENS: Record<string, RoleCategory> = {
-  backend: RoleCategory.BACKEND,
-  frontend: RoleCategory.FRONTEND,
-  'front-end': RoleCategory.FRONTEND,
-  fullstack: RoleCategory.FULLSTACK,
-  'full-stack': RoleCategory.FULLSTACK,
-  'full stack': RoleCategory.FULLSTACK,
-  devops: RoleCategory.DEVOPS,
-  mobile: RoleCategory.MOBILE,
-  'machine learning': RoleCategory.AI_ML,
-  'ai/ml': RoleCategory.AI_ML,
-};
-
-function escapeRegExp(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-/** Whole-word containment, not substring — `.includes()` alone would match a skill
- * named "R" or "C" (real language names in this DB) inside ordinary words like
- * "remote" or "fullstack", spuriously narrowing retrieval to just that one skill. */
-function containsWholeWord(haystack: string, word: string): boolean {
-  return new RegExp(`(?:^|[^a-z0-9+#.])${escapeRegExp(word)}(?:$|[^a-z0-9+#.])`, 'i').test(
-    haystack,
-  );
-}
 
 /**
  * Light hybrid retrieval: if the question names a specific skill or role category,
@@ -53,13 +28,7 @@ async function detectHybridFilters(
 ): Promise<{ roleCategory?: RoleCategory; skillIds?: string[] }> {
   const lowerQuestion = question.toLowerCase();
 
-  let roleCategory: RoleCategory | undefined;
-  for (const [token, category] of Object.entries(ROLE_CATEGORY_TOKENS)) {
-    if (containsWholeWord(lowerQuestion, token)) {
-      roleCategory = category;
-      break;
-    }
-  }
+  const roleCategory = detectRoleCategoryFromText(lowerQuestion);
 
   const allSkills = await prisma.skill.findMany({ select: { id: true, name: true } });
   const skillIds = allSkills
