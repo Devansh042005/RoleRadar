@@ -167,10 +167,10 @@ export function AskPanel() {
                   Cited sources
                 </h3>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {result.sources.map((source) =>
+                  {result.sources.map((source, index) =>
                     source.type === "posting" ? (
                       <a
-                        key={`posting-${source.id}`}
+                        key={`posting-${source.id}-${index}`}
                         href={source.sourceUrl}
                         target="_blank"
                         rel="noreferrer"
@@ -191,7 +191,7 @@ export function AskPanel() {
                       </a>
                     ) : (
                       <div
-                        key={`document-${source.id}`}
+                        key={`document-${source.id}-${index}`}
                         className="flex items-center justify-between gap-2 border border-border px-3 py-2 text-sm"
                       >
                         <span className="min-w-0">
